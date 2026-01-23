@@ -1,8 +1,12 @@
 # algorithme de detection de terminaison de Kumar
+# parametre optionnel: nombre de noeuds
+
 import sys, random
 config(channel is fifo)
 
 class Agent(process):
+    # ags: liste des identifiants DistAlgo des agents
+    # mon: identifiant DistAlgo du moniteur
     def setup(ags, mon):
         self.aSent = dict.fromkeys(ags, 0)
         self.aRcvd = dict.fromkeys(ags, 0)
