@@ -1,0 +1,9 @@
+# Ne pas suivre le dossier source de DistAlgo
+distalgo/
+
+# Ne pas suivre les fichiers Python compilés
+__pycache__/
+*.pyc
+
+# Optionnel : si le compilateur génère des fichiers .py à partir de tes .da
+kumar.py

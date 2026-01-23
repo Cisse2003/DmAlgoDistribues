@@ -1,0 +1,79 @@
+# algorithme de detection de terminaison de Kumar
+import sys, random
+config(channel is fifo)
+
+class Agent(process):
+    def setup(ags, mon):
+        self.aSent = dict.fromkeys(ags, 0)
+        self.aRcvd = dict.fromkeys(ags, 0)
+        self.active = True 
+
+    def run():
+        while True:
+            if self.active:
+                r = random.random()
+                if r < 0.2: 
+                    # On choisit un autre agent [cite: 38-39]
+                    q = random.choice([a for a in ags if a != self])
+                    self.aSent[q] += 1
+                    send(('m', self), to=q)
+                    output(f"Agent envoie m à {q}") # 'self.pid' supprimé
+                elif r < 0.3:
+                    # Terminaison locale [cite: 40-42]
+                    self.active = False
+                    send(('t', dict(self.aSent), dict(self.aRcvd)), to=mon)
+                    output("Agent devient inactif et envoie t")
+
+            # Syntaxe await simplifiée pour éviter les SyntaxError précédentes
+            if await(some(received(('stop',)))):
+                break
+            elif timeout(0.1):
+                pass
+        
+        output("Arrêt de l'agent.")
+
+    def receive(msg=('m', q)):
+        self.active = True # [cite: 44]
+        self.aRcvd[q] += 1 # [cite: 45]
+        output(f"Reçu m de {q}")
+
+class Monitor(process):
+    def setup(ags):
+        self.seen = set()
+        self.mSent = {p: {q: 0 for q in ags} for p in ags}
+        self.mRcvd = {p: {q: 0 for q in ags} for p in ags}
+
+    def run():
+        output("Moniteur : Initialisé. En attente de détection...")
+
+        # Condition de terminaison globale 
+        await(len(self.seen) == len(self.ags) and 
+              all(self.mSent[p][q] == self.mRcvd[q][p] for p in self.ags for q in self.ags))
+        
+        output(">>> MONITEUR : TERMINAISON GLOBALE DÉTECTÉE <<<")
+        send(('done',), to=parent())
+
+        await(some(received(('stop',))))
+        output("Moniteur : Arrêt.")
+
+    def receive(msg=('t', s, r), from_=p):
+        self.seen.add(p)
+        self.mSent[p] = s
+        self.mRcvd[p] = r
+        output(f"Moniteur : t reçu de {p}. ({len(self.seen)}/{len(self.ags)})")
+
+def main():
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 5
+    ags = list(new(Agent, num = n))
+    monitor = new(Monitor)
+    for a in ags:
+        setup(a, (ags, monitor))
+    setup(monitor, (ags,))
+
+    start(monitor)
+    start(ags)
+
+    # perso: Le main doit attendre que le moniteur ait fini 
+    if await(some(received(('done',)))):
+        output("Main : Terminaison détectée, arrêt des processus.")
+        send(('stop',), to=(ags + [monitor]))
