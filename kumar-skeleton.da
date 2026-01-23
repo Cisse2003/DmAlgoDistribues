@@ -4,47 +4,41 @@
 import sys, random
 config(channel is fifo)
 
-
 class Agent(process):
-
-    # ags : liste des agents du système
-    # mon : identifiant du moniteur
     def setup(ags, mon):
-        # mémorisation des autres agents et du moniteur
+        # Les lignes suivantes sont automatiques en DistAlgo, 
+        # mais tu peux les garder si tu préfères être explicite :
         self.ags = ags
         self.mon = mon
-
         self.aSent = dict.fromkeys(ags, 0)
         self.aRcvd = dict.fromkeys(ags, 0)
         self.active = True 
 
     def run():
-        # exécution continue de l'agent, boucle inf
+        # exécution continue de l'agent
         while True:
-
             # transitions spontanées possibles uniquement si l'agent est actif
             if self.active:
                 r = random.random()
-
                 if r < 0.5:
-                    # envoi d'un message applicatif 'm' à un agent q
-                    q = random.choice(self.ags)
-                    send('m', to=q)
+                    # On exclut soi-même pour éviter les boucles infinies sur un seul agent
+                    q = random.choice([a for a in self.ags if a != self])
+                    send(('m',), to=q) # Utilise un tuple ('m',) c'est plus sûr
                     self.aSent[q] += 1
                     output(f"Agent {self.pid} envoie m à {q}")
-
                 else:
-                    # terminaison locale :
-                    # l'agent devient inactif et informe le moniteur
                     self.active = False
-                    t_msg = ('t', dict(self.aSent), dict(self.aRcvd))
-                    send(t_msg, to=self.mon)
+                    # On envoie des copies (dict) pour éviter les accès concurrents
+                    send(('t', dict(self.aSent), dict(self.aRcvd)), to=self.mon)
                     output(f"Agent {self.pid} devient inactif et envoie t")
 
-            await receive()
+            if await(some(received(('stop',)))): 
+                break
+            elif not self.active:
+                # Si inactif, on attend d'être réveillé ou de devoir s'arrêter
+                await(self.active or some(received(('stop',))), timeout=0.1)
 
-    # réception d'un message applicatif 'm'
-    receive('m', q):
+    def receive(msg=('m',), from_=q):
         self.active = True
         self.aRcvd[q] += 1
         output(f"Agent {self.pid} reçoit m de {q}")
@@ -52,7 +46,37 @@ class Agent(process):
 
 class Monitor(process):
 
-    # a completer 
+    def setup(ags):
+        # Ensemble des agents ayant envoyé au moins un message 't'
+        self.seen = set()
+        # Initialisation des structures mSent et mRcvd selon l'énoncé
+        # On utilise des dictionnaires de dictionnaires pour coller aux indices [p][q]
+        self.mSent = {p: {q: 0 for q in ags} for p in ags}
+        self.mRcvd = {p: {q: 0 for q in ags} for p in ags}
+
+    def run():
+        output("Moniteur : Initialisé. En attente de détection...")
+
+        # 1. Tous les agents ont envoyé un message 't' (seen == ags)
+        # 2. Pour toute paire p,q : mSent[p][q] == mRcvd[q][p] (pas de messages en vol)
+        await(len(seen) == len(ags) and 
+              all(mSent[p][q] == mRcvd[q][p] for p in ags for q in ags))
+        
+        output(">>> MONITEUR : TERMINAISON GLOBALE DÉTECTÉE <<<")
+        
+        #informer le processus parent (main)
+        send(('done',), to=parent())
+
+        # On attend le signal de fin global pour fermer proprement le processus moniteur
+        await(some(received(('stop',))))
+        output("Moniteur : Arrêt du processus.")
+
+    # 's' et 'r' sont les dictionnaires aSent et aRcvd envoyés par l'agent p
+    def receive(msg=('t', s, r), from_=p):
+        seen.add(p)
+        mSent[p] = s
+        mRcvd[p] = r
+        output(f"Moniteur : Mise à jour reçue de {p}. Agents ayant terminé localement : {len(seen)}/{len(ags)}")
 
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 5
