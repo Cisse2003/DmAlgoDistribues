@@ -4,44 +4,51 @@
 import sys, random
 config(channel is fifo)
 
+
 class Agent(process):
 
-    # ags: liste des identifiants DistAlgo des agents
-    # mon: identifiant DistAlgo du moniteur
+    # ags : liste des agents du système
+    # mon : identifiant du moniteur
     def setup(ags, mon):
+        # mémorisation des autres agents et du moniteur
+        self.ags = ags
+        self.mon = mon
+
         self.aSent = dict.fromkeys(ags, 0)
         self.aRcvd = dict.fromkeys(ags, 0)
         self.active = True 
 
     def run():
-        # Boucle infinie pour simuler l'exécution continue
+        # exécution continue de l'agent, boucle inf
         while True:
-            # Transitions spontanées (seulement si actif)
+
+            # transitions spontanées possibles uniquement si l'agent est actif
             if self.active:
                 r = random.random()
+
                 if r < 0.5:
-                    # Envoi d'un message 'm' à un agent aléatoire ( y compris soi-même)
+                    # envoi d'un message applicatif 'm' à un agent q
                     q = random.choice(self.ags)
                     send('m', to=q)
                     self.aSent[q] += 1
-                    print(f"Agent {self.pid} a envoyé 'm' à {q}, aSent[{q}] = {self.aSent[q]}")
+                    output(f"Agent {self.pid} envoie m à {q}")
+
                 else:
-                # Terminaison locale
-                self.active = False
-                t_msg = ('t', dict(self.aSent), dict(self.aRcvd))
-                send(t_msg, to=self.mon)
-                print(f"Agent {self.pid} terminaison locale, envoyé {t_msg} au moniteur")
-            # Réception du prochain message (bloque jusqu'à arrivée)
-            msg, sender = receive()
-            if msg == 'stop':
-                print(f"Agent {self.pid} a reçu 'stop', sortie")
-                break
-            elif msg == 'm' and sender in self.aRcvd:
-                self.active = True
-                self.aRcvd[sender] += 1
-                print(f"Agent {self.pid} a reçu 'm' de {sender}, active=True, aRcvd[{sender}] = {self.aRcvd[sender]}")"
-            else:
-                print(f"Agent {self.pid} message inattendu {msg} de {sender}")
+                    # terminaison locale :
+                    # l'agent devient inactif et informe le moniteur
+                    self.active = False
+                    t_msg = ('t', dict(self.aSent), dict(self.aRcvd))
+                    send(t_msg, to=self.mon)
+                    output(f"Agent {self.pid} devient inactif et envoie t")
+
+            await receive()
+
+    # réception d'un message applicatif 'm'
+    receive('m', q):
+        self.active = True
+        self.aRcvd[q] += 1
+        output(f"Agent {self.pid} reçoit m de {q}")
+
 
 class Monitor(process):
 
