@@ -11,7 +11,7 @@ class Agent(process):
     def setup(ags, mon):
         self.aSent = dict.fromkeys(ags, 0)
         self.aRcvd = dict.fromkeys(ags, 0)
-        self.active = True 
+        self.active = True
 
     def run():
         # Boucle infinie pour simuler l'exécution continue
@@ -45,7 +45,46 @@ class Agent(process):
 
 class Monitor(process):
 
-    # a completer 
+    def setup(ags):
+        self.ags = ags
+        self.n = len(ags)
+        self.seen = set()
+        self.mSent = {p: dict.fromkeys(ags, 0) for p in ags}
+        self.mRcvd = {p: dict.fromkeys(ags, 0) for p in ags}
+
+    def run():
+        # Boucle infinie pour réception continue
+        while True:
+            msg, sender = receive()
+            if msg == 'stop':
+                print("Moniteur a reçu 'stop', sortie")
+                break
+            elif isinstance(msg, tuple) and msg[0] == 't':
+                p = sender
+                _, s, r = msg
+                self.seen.add(p)
+                self.mSent[p] = s.copy()
+                self.mRcvd[p] = r.copy()
+                print(f"Moniteur a reçu 't' de {p}, seen={self.seen}")
+
+                # Vérification de la terminaison globale
+                if len(self.seen) == self.n:
+                    terminer = True
+                    for pi in self.ags:
+                        for qi in self.ags:
+                            if self.mSent[pi][qi] != self.mRcvd[qi][pi]:
+                                termner = False
+                                break
+                        if not terminer:
+                            break
+                    if terminer:
+                        print("Moniteur : TERMINAISON GLOBALE DÉTECTÉE !!")
+                        send('done', to=parent())
+                        #Continuer pour attendre 'stop' du main
+            else:
+                print(f"Moniteur message inattendu {msg} de {sender}")
+
+
 
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 5
@@ -58,3 +97,13 @@ def main():
 
     start(monitor)
     start(ags)
+
+    # Le main attend 'done' du moniteur
+    msg, sender = receive()
+    if msg == 'done':
+        print("Main a reçu 'done' du moniteur, envoi de 'stop' à tous les agents et moniteur")
+        for a in ags:
+            send('stop', to=a)
+        send('stop', to=moniteur)
+    else:
+        pirnt(f"Main message inattendu {msg} de {sender}")
