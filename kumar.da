@@ -5,6 +5,7 @@ import sys, random
 config(channel is fifo)
 
 class Agent(process):
+
     # ags: liste des identifiants DistAlgo des agents
     # mon: identifiant DistAlgo du moniteur
     def setup(ags, mon):
@@ -13,20 +14,22 @@ class Agent(process):
         self.active = True 
 
     def run():
+        # Pour simuler l'exécution continue
         while True:
+            # Transitions sontanées (seulement si actif)
             if self.active:
                 r = random.random()
-                if r < 0.2: 
-                    # On choisit un autre agent [cite: 38-39]
-                    q = random.choice([a for a in ags if a != self])
+                if r < 0.2:
+                    # Envoi d'un message 'm' à un agent aléatoire ( y compris soi-même)
+                    q = random.choice(ags)
                     self.aSent[q] += 1
                     send(('m', self), to=q)
-                    output(f"Agent envoie m à {q}") # 'self.pid' supprimé
+                    output(f"Agent envoie m à {q}")
                 elif r < 0.3:
-                    # Terminaison locale [cite: 40-42]
+                    # Terminaison locale
                     self.active = False
                     send(('t', dict(self.aSent), dict(self.aRcvd)), to=mon)
-                    output("Agent devient inactif et envoie t")
+                    output("Agent devient inactif et envoie t au moniteur")
 
             # Syntaxe await simplifiée pour éviter les SyntaxError précédentes
             if await(some(received(('stop',)))):
@@ -44,16 +47,19 @@ class Agent(process):
 class Monitor(process):
     def setup(ags):
         self.seen = set()
-        self.mSent = {p: {q: 0 for q in ags} for p in ags}
-        self.mRcvd = {p: {q: 0 for q in ags} for p in ags}
+        self.mSent = {p: dict.fromkeys(ags, 0) for p in ags}
+        self.mRcvd = {p: dict.fromkeys(ags, 0) for p in ags}
 
     def run():
         output("Moniteur : Initialisé. En attente de détection...")
 
-        # Condition de terminaison globale 
-        await(len(self.seen) == len(self.ags) and 
+        # Condition de terminaison globale
+            # tous inactifs
+            # plus de messages dans le réseau
+
+        await(len(self.seen) == len(self.ags) and
               all(self.mSent[p][q] == self.mRcvd[q][p] for p in self.ags for q in self.ags))
-        
+
         output(">>> MONITEUR : TERMINAISON GLOBALE DÉTECTÉE <<<")
         send(('done',), to=parent())
 
@@ -68,6 +74,7 @@ class Monitor(process):
 
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 5
+    # creer une liste plutot qu'un ensemble d'agents simplifie l'initialisation des compteurs
     ags = list(new(Agent, num = n))
     monitor = new(Monitor)
     for a in ags:
@@ -79,5 +86,5 @@ def main():
 
     # perso: Le main doit attendre que le moniteur ait fini 
     if await(some(received(('done',)))):
-        output("Main : Terminaison détectée, arrêt des processus.")
+        output("Main a reçu 'done' du moniteur, envoi de 'stop' à tous les agents et moniteur.")
         send(('stop',), to=(ags + [monitor]))

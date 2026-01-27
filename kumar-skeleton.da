@@ -6,7 +6,7 @@ class Agent(process):
     def setup(ags, mon):
         self.aSent = dict.fromkeys(ags, 0)
         self.aRcvd = dict.fromkeys(ags, 0)
-        self.active = True 
+        self.active = True
 
     def run():
         while True:
@@ -14,7 +14,7 @@ class Agent(process):
                 r = random.random()
                 if r < 0.2: # Probabilité d'envoi
                     q = random.choice([a for a in self.ags if a != self])
-                    send(('m',), to=q) 
+                    send(('m',), to=q)
                     self.aSent[q] += 1
                     output(f"Agent {self.pid} envoie m à {q}")
                 elif r < 0.3: # Probabilité de devenir inactif
@@ -24,9 +24,9 @@ class Agent(process):
 
             # On attend soit le signal d'arrêt, soit de redevenir actif (via receive)
             # Le timeout évite de consommer 100% du CPU
-            if await(some(received(('stop',))), timeout=0.1): 
+            if await(some(received(('stop',))), timeout=0.1):
                 break
-        
+
         output(f"Agent {self.pid} s'arrête.")
 
     def receive(msg=('m',), from_=q):
@@ -43,10 +43,10 @@ class Monitor(process):
     def run():
         output("Moniteur : Initialisé. En attente de détection...")
 
-        # Condition de terminaison globale 
-        await(len(self.seen) == len(self.ags) and 
+        # Condition de terminaison globale
+        await(len(self.seen) == len(self.ags) and
               all(self.mSent[p][q] == self.mRcvd[q][p] for p in self.ags for q in self.ags))
-        
+
         output(">>> MONITEUR : TERMINAISON GLOBALE DÉTECTÉE <<<")
         send(('done',), to=parent())
 
@@ -70,7 +70,7 @@ def main():
     start(monitor)
     start(ags)
 
-    # perso: Le main doit attendre que le moniteur ait fini 
+    # perso: Le main doit attendre que le moniteur ait fini
     if await(some(received(('done',)))):
         output("Main : Terminaison détectée, arrêt des processus.")
         send(('stop',), to=(ags + [monitor]))
